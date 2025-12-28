@@ -2,16 +2,20 @@
 <img width="1200" height="475"/>
 </div>
 
-# Run and deploy your AI Studio app
+# Court Bundling Software - for all
 
 TEXT
-## Run Locally
+## Runs Locally
+## Paginates and provides index
+## Index Configurability [Experimental]
 
-**Prerequisites:**  Node.js
 
-TEXT
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+DEVELOPMENT NOTES:
+
+**Prerequisites (included in release package):  Node.js**
+
+
+Download files and extract node_modules to the same directory
+run eBundle.bat
+
+Development dependencies include Node.js, running 'npm install' within the install directory may assist - but should not be required.  
