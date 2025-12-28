@@ -8,7 +8,9 @@
 ## eBundle - Court Bundling Software for all
 
 A free and open-source alternative to common bundling software, offering robust functionality for legal professionals.
+Intended for the UK Court system, but applicable to other Jurisdictions.
 
+Initial code created with Google AI studio.
 
 ## Features:
  Only runs locally on machine, no processing of data occurs anywhere except your device.
@@ -23,4 +25,3 @@ A free and open-source alternative to common bundling software, offering robust 
 1)Download files and extract node_modules to the same directory
 2)run eBundle.bat
 
-Running 'npm install' within the install directory may assist - but should not be required.  
