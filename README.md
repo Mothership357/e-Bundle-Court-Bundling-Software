@@ -28,7 +28,7 @@ Initial code created with Google AI studio.
 
 INSTALLATION
 
-1) Download latest release. Extract to any folder.
+1) Download latest release. Extract to any folder. (Releases page: https://github.com/Mothership357/e-Bundle-Court-Bundling-Software/releases)
 
 2) run eBundle.bat.
 
