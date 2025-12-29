@@ -8,7 +8,7 @@ Initial code created with Google AI studio.
 
 ## Features:
 
- Only runs locally on machine, within your browser.
+ Runs locally on machine, within your browser.
  
  Paginates and provides index in seconds, saving time. The index hyperlinks to documents within the Bundle. 
  
