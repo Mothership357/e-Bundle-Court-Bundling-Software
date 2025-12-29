@@ -10,13 +10,17 @@ Initial code created with Google AI studio.
 
  Runs locally on machine, within your browser.
  
- Paginates and provides index in seconds, saving time. The index hyperlinks to documents within the Bundle. 
+ Merges pdf files and Paginates to provide a Full electronic Bundle in seconds, saving time. 
+ 
+ Generates an index with appropriate page numbering and hyperlinks to documents within. 
  
  Late Additions can be made with customisable pagination.
 
- Index page Configurability, to create different bundle index layouts.
+ Index layout customisation page, to create different bundle index layouts.
 
  [Experimental] Documents can be selectivley scanned to OCR, to leave scanned material.
+ [Experimental] Drag and Drop documents planned.
+
 
 ## INSTALLATION NOTES:
 
