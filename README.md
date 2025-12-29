@@ -28,8 +28,10 @@ Initial code created with Google AI studio.
 
 INSTALLATION
 
-1)Download files and extract node_modules (parts 1, 2 and 3) all to the same directory folder.
+1) Download latest release. Extract to any folder.
 
-2)run eBundle.bat.
+2) run eBundle.bat.
+
+3) Create Bundles ! 
 
 Feedback most welcome. Code provided 'as is' with no warranty. 
