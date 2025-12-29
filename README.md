@@ -15,11 +15,13 @@ Initial code created with Google AI studio.
 
  [Experimental] Documents can be selectivley scanned to OCR, to leave scanned material.
 
-## DEVELOPMENT NOTES:
+## INSTALLATION NOTES:
 
 **Prerequisites (included in release package):  Node.js**
 
-1)Download files and extract node_modules to the same directory
-2)run eBundle.bat
+INSTALLATION
+1)Download files and extract node_modules to the same directory folder.
+
+2)run eBundle.bat.
 
 Feedback most welcome. Code provided 'as is' with no warranty. 
