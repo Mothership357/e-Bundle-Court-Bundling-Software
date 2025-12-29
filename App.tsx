@@ -17,10 +17,23 @@ import {
   Moon,
   Sun,
   Layout,
-  Move
+  Move,
+  ScanText,
+  X,
+  Type
 } from 'lucide-react';
-import { BundleConfig, BundleDocument, BundleSection, IndexLayout } from './types';
+import { BundleConfig, BundleDocument, BundleSection, IndexLayout, DateFormat, LayoutItem } from './types';
 import { generateBundle, getPdfPageCount } from './services/pdfService';
+
+function formatDatePreview(dateStr: string, format: string): string {
+  if (!dateStr) return '-';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const [y, m, d] = parts;
+  if (format === 'DD-MM-YYYY') return `${d}-${m}-${y}`;
+  if (format === 'MM-DD-YYYY') return `${m}-${d}-${y}`;
+  return `${y}-${m}-${d}`;
+}
 
 const App: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState(() => 
@@ -31,13 +44,17 @@ const App: React.FC = () => {
     caseNumber: '',
     caseName: '',
     courtName: '',
+    dateFormat: 'DD-MM-YYYY',
     sections: [
       { id: 'initial-section', title: 'Main Documents', documents: [] }
     ],
     indexLayout: {
-      caseName: { x: 50, y: 760 },
-      caseNumber: { x: 50, y: 745 },
-      courtName: { x: 50, y: 730 }
+      items: [
+        { id: 'case-name-field', text: '[Case Name]', x: 50, y: 760 },
+        { id: 'case-number-field', text: '[Case Number]', x: 50, y: 745 },
+        { id: 'court-name-field', text: '[Court Name]', x: 50, y: 730 }
+      ],
+      listStartY: 421 // Halfway down of 841.89
     }
   });
 
@@ -53,7 +70,23 @@ const App: React.FC = () => {
     }
   }, [isDarkMode]);
 
-  const updateMetadata = (field: keyof BundleConfig, value: string) => {
+  // Sync metadata text fields to layout items if they match initial IDs
+  useEffect(() => {
+    setConfig(prev => ({
+      ...prev,
+      indexLayout: {
+        ...prev.indexLayout,
+        items: prev.indexLayout.items.map(item => {
+          if (item.id === 'case-name-field' && prev.caseName) return { ...item, text: `Case: ${prev.caseName}` };
+          if (item.id === 'case-number-field' && prev.caseNumber) return { ...item, text: `Case No: ${prev.caseNumber}` };
+          if (item.id === 'court-name-field' && prev.courtName) return { ...item, text: `Court: ${prev.courtName}` };
+          return item;
+        })
+      }
+    }));
+  }, [config.caseName, config.caseNumber, config.courtName]);
+
+  const updateMetadata = (field: keyof BundleConfig, value: any) => {
     setConfig(prev => ({ ...prev, [field]: value }));
   };
 
@@ -95,7 +128,8 @@ const App: React.FC = () => {
         file,
         pageCount,
         isLateAddition: false,
-        latePrefix: 'A'
+        latePrefix: 'A',
+        shouldOcr: false
       });
     }
     setConfig(prev => ({
@@ -104,6 +138,17 @@ const App: React.FC = () => {
         s.id === sectionId ? { ...s, documents: [...s.documents, ...newDocs] } : s
       )
     }));
+  };
+
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const onDrop = (e: React.DragEvent, sectionId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handleFileUpload(sectionId, e.dataTransfer.files);
   };
 
   const updateDocument = (sectionId: string, docId: string, updates: Partial<BundleDocument>) => {
@@ -184,13 +229,18 @@ const App: React.FC = () => {
     reader.onload = (event) => {
       try {
         const loaded = JSON.parse(event.target?.result as string) as BundleConfig;
-        // Ensure default layout if missing
         if (!loaded.indexLayout) {
           loaded.indexLayout = {
-            caseName: { x: 50, y: 760 },
-            caseNumber: { x: 50, y: 745 },
-            courtName: { x: 50, y: 730 }
+            items: [
+              { id: 'case-name-field', text: '[Case Name]', x: 50, y: 760 },
+              { id: 'case-number-field', text: '[Case Number]', x: 50, y: 745 },
+              { id: 'court-name-field', text: '[Court Name]', x: 50, y: 730 }
+            ],
+            listStartY: 421
           };
+        }
+        if (!loaded.dateFormat) {
+          loaded.dateFormat = 'DD-MM-YYYY';
         }
         setConfig(loaded);
       } catch (err) {
@@ -208,7 +258,8 @@ const App: React.FC = () => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Bundle-${config.caseNumber || 'Output'}.pdf`;
+      const fileName = `${config.caseNumber || ''} ${config.caseName || ''} Hearing Bundle`.trim() || 'Hearing Bundle';
+      a.download = `${fileName}.pdf`;
       a.click();
     } catch (err) {
       console.error(err);
@@ -218,16 +269,48 @@ const App: React.FC = () => {
     }
   };
 
-  const updateLayoutPos = (key: keyof IndexLayout, x: number, y: number) => {
+  const updateLayoutPos = (itemId: string, x: number, y: number) => {
     setConfig(prev => ({
       ...prev,
       indexLayout: {
-        ...(prev.indexLayout || {
-          caseName: { x: 50, y: 760 },
-          caseNumber: { x: 50, y: 745 },
-          courtName: { x: 50, y: 730 }
-        }),
-        [key]: { x, y }
+        ...prev.indexLayout,
+        items: prev.indexLayout.items.map(item => item.id === itemId ? { ...item, x, y } : item)
+      }
+    }));
+  };
+
+  const updateLayoutText = (itemId: string, text: string) => {
+    setConfig(prev => ({
+      ...prev,
+      indexLayout: {
+        ...prev.indexLayout,
+        items: prev.indexLayout.items.map(item => item.id === itemId ? { ...item, text } : item)
+      }
+    }));
+  };
+
+  const addLayoutItem = () => {
+    const newItem: LayoutItem = {
+      id: Math.random().toString(36).substr(2, 9),
+      text: 'New Text Block',
+      x: 50,
+      y: 700
+    };
+    setConfig(prev => ({
+      ...prev,
+      indexLayout: {
+        ...prev.indexLayout,
+        items: [...prev.indexLayout.items, newItem]
+      }
+    }));
+  };
+
+  const removeLayoutItem = (itemId: string) => {
+    setConfig(prev => ({
+      ...prev,
+      indexLayout: {
+        ...prev.indexLayout,
+        items: prev.indexLayout.items.filter(i => i.id !== itemId)
       }
     }));
   };
@@ -240,7 +323,7 @@ const App: React.FC = () => {
           <div>
             <h1 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
               <FileText className="text-indigo-600 dark:text-indigo-400" />
-              eBundle: Court Bundle Generator
+              eBundle
             </h1>
           </div>
           <button 
@@ -259,9 +342,9 @@ const App: React.FC = () => {
           </div>
           <div className="space-y-3">
             {[
-              { label: 'Case Number', field: 'caseNumber' as const },
-              { label: 'Case Name', field: 'caseName' as const },
-              { label: 'Court Name', field: 'courtName' as const }
+              { label: 'Case Number', field: 'caseNumber' as const, placeholder: 'e.g. C1234567' },
+              { label: 'Case Name', field: 'caseName' as const, placeholder: 'e.g. John v Smith' },
+              { label: 'Court Name', field: 'courtName' as const, placeholder: 'e.g. Magistrates Court' }
             ].map((item) => (
               <div key={item.field}>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{item.label}</label>
@@ -269,11 +352,23 @@ const App: React.FC = () => {
                   type="text" 
                   value={config[item.field] as string}
                   onChange={(e) => updateMetadata(item.field, e.target.value)}
-                  placeholder={`e.g. ${item.label}`}
+                  placeholder={item.placeholder}
                   className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                 />
               </div>
             ))}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Index Date Format</label>
+              <select
+                value={config.dateFormat}
+                onChange={(e) => updateMetadata('dateFormat', e.target.value as DateFormat)}
+                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+              >
+                <option value="DD-MM-YYYY">DD-MM-YYYY</option>
+                <option value="MM-DD-YYYY">MM-DD-YYYY</option>
+                <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+              </select>
+            </div>
           </div>
         </section>
 
@@ -385,8 +480,8 @@ const App: React.FC = () => {
                                   className="w-full text-sm dark:bg-slate-900 dark:border-slate-600 dark:text-white border rounded p-1" 
                                 />
                             </div>
-                            <div className="flex flex-col justify-end">
-                                <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
+                            <div className="flex flex-row items-end gap-4 h-full">
+                                <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 cursor-pointer mb-1 whitespace-nowrap">
                                   <input 
                                     type="checkbox" 
                                     checked={doc.isLateAddition} 
@@ -396,12 +491,21 @@ const App: React.FC = () => {
                                   Late Addition
                                   {doc.isLateAddition && (
                                     <input 
-                                      className="w-12 text-center border rounded dark:bg-slate-900 dark:border-slate-600" 
+                                      className="w-8 text-center border rounded dark:bg-slate-900 dark:border-slate-600 ml-1" 
                                       value={doc.latePrefix} 
-                                      placeholder="Pfx"
+                                      maxLength={1}
                                       onChange={(e) => updateDocument(section.id, doc.id, { latePrefix: e.target.value.toUpperCase() })} 
                                     />
                                   )}
+                                </label>
+                                <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 cursor-pointer mb-1 whitespace-nowrap">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={doc.shouldOcr} 
+                                    onChange={(e) => updateDocument(section.id, doc.id, { shouldOcr: e.target.checked })}
+                                    className="rounded border-slate-300 dark:border-slate-600 text-indigo-600 focus:ring-indigo-500"
+                                  />
+                                  OCR Document
                                 </label>
                             </div>
                           </div>
@@ -412,7 +516,11 @@ const App: React.FC = () => {
                         </div>
                       ))}
                       <div className="mt-4">
-                        <label className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl hover:bg-indigo-50/50 dark:hover:bg-indigo-900/10 cursor-pointer transition-all">
+                        <label 
+                          onDragOver={onDragOver}
+                          onDrop={(e) => onDrop(e, section.id)}
+                          className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl hover:bg-indigo-50/50 dark:hover:bg-indigo-900/10 cursor-pointer transition-all"
+                        >
                           <Plus className="text-slate-400 mb-1" />
                           <span className="text-sm text-slate-500">Drag or Click to add PDF Documents</span>
                           <input type="file" multiple accept=".pdf" className="hidden" onChange={(e) => handleFileUpload(section.id, e.target.files)} />
@@ -427,45 +535,42 @@ const App: React.FC = () => {
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-bold text-slate-800 dark:text-white">Index Page Editor</h2>
-                  <p className="text-sm text-slate-500">Reposition header items by dragging them on the page preview below.</p>
+                  <h2 className="text-xl font-bold text-slate-800 dark:text-white">Index Layout Editor</h2>
+                  <p className="text-sm text-slate-500">Drag items to reposition them. Double-click text to edit.</p>
                 </div>
+                <button 
+                  onClick={addLayoutItem}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+                >
+                  <Type size={18} /> Add Text Box
+                </button>
               </div>
               
               <div className="flex justify-center bg-slate-200 dark:bg-slate-900 p-8 rounded-2xl overflow-hidden min-h-[700px]">
-                {/* A4 Preview Shell */}
                 <div 
                   className="relative bg-white shadow-2xl overflow-hidden border border-slate-300" 
                   style={{ width: '595px', height: '842px', minWidth: '595px', transform: 'scale(0.8)', transformOrigin: 'top center' }}
                 >
-                  <div className="absolute top-12 w-full text-center font-bold text-xl uppercase tracking-widest border-b border-slate-200 pb-4 text-slate-800">Index</div>
+                  {/* Notice: Word 'INDEX' removed from here as per request */}
                   
-                  {/* Draggable Meta Blocks */}
-                  {[
-                    { key: 'caseName' as const, label: 'Case:', value: config.caseName || '[Case Name]' },
-                    { key: 'caseNumber' as const, label: 'Case No:', value: config.caseNumber || '[Case Number]' },
-                    { key: 'courtName' as const, label: 'Court:', value: config.courtName || '[Court Name]' }
-                  ].map((meta) => {
-                    const pos = config.indexLayout?.[meta.key] || { x: 50, y: 700 };
-                    // Convert PDF-style bottom-up Y (0 at bottom) to CSS top-down Y
-                    const topY = 842 - pos.y;
+                  {config.indexLayout.items.map((item) => {
+                    const topY = 842 - item.y;
                     
                     return (
                       <div 
-                        key={meta.key}
-                        className="absolute cursor-move select-none p-2 border-2 border-dashed border-transparent hover:border-indigo-400 hover:bg-indigo-50 rounded flex items-center gap-2 group z-10"
-                        style={{ left: pos.x, top: topY }}
+                        key={item.id}
+                        className="absolute cursor-move select-none p-2 border border-dashed border-transparent hover:border-indigo-400 hover:bg-indigo-50 rounded flex items-center gap-2 group z-10"
+                        style={{ left: item.x, top: topY }}
                         onMouseDown={(e) => {
                           const startX = e.clientX;
                           const startY = e.clientY;
-                          const initialX = pos.x;
-                          const initialY = pos.y;
+                          const initialX = item.x;
+                          const initialY = item.y;
                           
                           const move = (moveEvent: MouseEvent) => {
                             const dx = moveEvent.clientX - startX;
                             const dy = moveEvent.clientY - startY;
-                            // dy is positive when moving down, but Y is bottom-up so we subtract it
-                            updateLayoutPos(meta.key, Math.max(0, initialX + dx), Math.max(0, initialY - dy));
+                            updateLayoutPos(item.id, Math.max(0, initialX + dx), Math.max(0, initialY - dy));
                           };
                           
                           const up = () => {
@@ -477,27 +582,40 @@ const App: React.FC = () => {
                           window.addEventListener('mouseup', up);
                         }}
                       >
-                        <Move size={14} className="text-indigo-500 opacity-0 group-hover:opacity-100" />
-                        <span className="text-[11px] font-bold text-slate-900 whitespace-nowrap">{meta.label} {meta.value}</span>
+                        <Move size={12} className="text-indigo-500 opacity-0 group-hover:opacity-100" />
+                        <input 
+                          value={item.text}
+                          onChange={(e) => updateLayoutText(item.id, e.target.value)}
+                          className="bg-transparent border-none focus:ring-1 focus:ring-indigo-300 rounded px-1 text-[11px] font-bold text-slate-900 min-w-[100px]"
+                        />
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); removeLayoutItem(item.id); }}
+                          className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 p-1"
+                        >
+                          <X size={12} />
+                        </button>
                       </div>
                     );
                   })}
 
-                  {/* Static Placeholder for Table structure */}
-                  <div className="absolute top-[220px] left-12 right-12">
-                    <div className="flex justify-between border-b-2 border-slate-800 pb-1 font-bold text-[10px] text-slate-800">
+                  <div 
+                    className="absolute left-12 right-12 transition-all border-t-2 border-dashed border-indigo-200"
+                    style={{ top: 842 - config.indexLayout.listStartY }}
+                  >
+                    <div className="absolute -top-6 left-0 bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">Index Start</div>
+                    <div className="flex justify-between border-b-2 border-slate-800 pb-1 font-bold text-[10px] text-slate-800 mt-2">
                       <span className="w-1/2">Document Name</span>
                       <span>Date</span>
                       <span>Page</span>
                     </div>
                     {config.sections.length > 0 ? (
-                        config.sections.slice(0, 10).map((s, idx) => (
+                        config.sections.slice(0, 10).map((s) => (
                             <React.Fragment key={s.id}>
                                 <div className="py-2 text-[10px] font-bold uppercase text-slate-700 border-b border-slate-100">{s.title}</div>
                                 {s.documents.slice(0, 3).map(d => (
-                                    <div key={d.id} className="flex justify-between border-b border-slate-50 py-1 text-[9px] text-slate-600">
-                                        <span className="w-1/2 truncate">{d.name}</span>
-                                        <span>{d.date}</span>
+                                    <div key={d.id} className="flex justify-between border-b border-slate-50 py-1 text-[9px] text-slate-600 hover:bg-indigo-50 cursor-pointer">
+                                        <span className="w-1/2 truncate underline text-indigo-600">{d.name}</span>
+                                        <span>{formatDatePreview(d.date, config.dateFormat)}</span>
                                         <span>{d.isLateAddition ? `${d.latePrefix}1` : '...'}</span>
                                     </div>
                                 ))}
@@ -507,7 +625,7 @@ const App: React.FC = () => {
                         [1,2,3,4,5].map(i => (
                             <div key={i} className="flex justify-between border-b border-slate-100 py-2 text-[9px] text-slate-400 italic">
                                 <span className="w-1/2">Sample Document {i}...</span>
-                                <span>01/01/2024</span>
+                                <span>{formatDatePreview('2024-01-01', config.dateFormat)}</span>
                                 <span>{i * 10}</span>
                             </div>
                         ))

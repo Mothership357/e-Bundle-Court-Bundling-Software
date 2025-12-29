@@ -1,84 +1,135 @@
 
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, PDFName } from 'pdf-lib';
 import { BundleConfig, BundleDocument, BundleSection, IndexLayout } from '../types';
+
+function formatDate(dateStr: string, format: string): string {
+  if (!dateStr) return '-';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const [y, m, d] = parts;
+  if (format === 'DD-MM-YYYY') return `${d}-${m}-${y}`;
+  if (format === 'MM-DD-YYYY') return `${m}-${d}-${y}`;
+  return `${y}-${m}-${d}`;
+}
 
 export async function generateBundle(config: BundleConfig): Promise<Uint8Array> {
   const mergedPdf = await PDFDocument.create();
   const font = await mergedPdf.embedFont(StandardFonts.Helvetica);
   const boldFont = await mergedPdf.embedFont(StandardFonts.HelveticaBold);
   
-  // Default positions if not provided (relative to bottom-left 0,0)
-  const defaultLayout: IndexLayout = {
-    caseName: { x: 50, y: 760 },
-    caseNumber: { x: 50, y: 745 },
-    courtName: { x: 50, y: 730 }
-  };
-  const layout = config.indexLayout || defaultLayout;
+  const layout = config.indexLayout;
+  const listStartY = layout.listStartY;
 
   // 1. Calculate Page Numbers for Index
-  let currentPage = 1;
-  const estimatedIndexPages = Math.ceil((config.sections.reduce((acc, s) => acc + s.documents.length + 1, 0) + 5) / 25) || 1;
-  currentPage = estimatedIndexPages + 1;
+  let currentPageNum = 1;
+  const totalDocs = config.sections.reduce((acc, s) => acc + s.documents.length, 0);
+  const totalEntries = totalDocs + config.sections.length;
+  
+  // Calculate how many items fit on the first page vs subsequent pages
+  // First page starts at listStartY. Subsequent pages start near top.
+  const firstPageCapacity = Math.floor((listStartY - 50) / 18);
+  const otherPageCapacity = 40; 
+  
+  let estimatedIndexPages = 1;
+  if (totalEntries > firstPageCapacity) {
+    estimatedIndexPages += Math.ceil((totalEntries - firstPageCapacity) / otherPageCapacity);
+  }
+  
+  currentPageNum = estimatedIndexPages + 1;
 
+  const docTargetPages: Map<string, number> = new Map();
   const processedSections: { section: BundleSection; docsWithPages: { doc: BundleDocument; startPage: number }[] }[] = [];
 
   for (const section of config.sections) {
     const sectionDocs: { doc: BundleDocument; startPage: number }[] = [];
-    currentPage++; // Section separator page
+    currentPageNum++; // For separator page
     for (const doc of section.documents) {
-      sectionDocs.push({ doc, startPage: currentPage });
-      currentPage += doc.pageCount;
+      sectionDocs.push({ doc, startPage: currentPageNum });
+      docTargetPages.set(doc.id, currentPageNum);
+      currentPageNum += doc.pageCount;
     }
     processedSections.push({ section, docsWithPages: sectionDocs });
   }
 
+  // Helper to add links to PDF
+  const addLinkToPage = (page: any, x: number, y: number, width: number, height: number, targetPageIdx: any) => {
+    const linkAnnotation = mergedPdf.context.obj({
+      Type: 'Annot',
+      Subtype: 'Link',
+      Rect: [x, y, x + width, y + height],
+      Border: [0, 0, 0],
+      A: {
+        Type: 'Action',
+        S: 'GoTo',
+        D: [targetPageIdx, 'XYZ', null, null, null],
+      },
+    });
+    const annots = page.node.get(PDFName.of('Annots')) || mergedPdf.context.obj([]);
+    annots.push(linkAnnotation);
+    page.node.set(PDFName.of('Annots'), annots);
+  };
+
   // 2. Generate Index Page(s)
+  const indexPages: any[] = [];
   for (let i = 0; i < estimatedIndexPages; i++) {
-    const indexPage = mergedPdf.addPage([595.28, 841.89]); // A4
+    const indexPage = mergedPdf.addPage([595.28, 841.89]);
+    indexPages.push(indexPage);
     const { width, height } = indexPage.getSize();
     
     if (i === 0) {
-      indexPage.drawText('INDEX', { x: width / 2 - 20, y: height - 50, size: 16, font: boldFont });
-      
-      // Use custom layout positions
-      indexPage.drawText(`Case: ${config.caseName}`, { x: layout.caseName.x, y: layout.caseName.y, size: 10, font });
-      indexPage.drawText(`Case No: ${config.caseNumber}`, { x: layout.caseNumber.x, y: layout.caseNumber.y, size: 10, font });
-      indexPage.drawText(`Court: ${config.courtName}`, { x: layout.courtName.x, y: layout.courtName.y, size: 10, font });
-      
-      indexPage.drawText('Document Name', { x: 50, y: 680, size: 10, font: boldFont });
-      indexPage.drawText('Date', { x: 400, y: 680, size: 10, font: boldFont });
-      indexPage.drawText('Page', { x: 500, y: 680, size: 10, font: boldFont });
-    }
-
-    let yOffset = i === 0 ? 655 : height - 50;
-    const itemsPerPage = 32;
-    const startIndex = i * itemsPerPage;
-    
-    const allEntries: any[] = [];
-    config.sections.forEach((s, sIdx) => {
-      allEntries.push({ title: s.title.toUpperCase(), isSection: true });
-      s.documents.forEach((d) => {
-        const startPage = processedSections[sIdx].docsWithPages.find(p => p.doc.id === d.id)?.startPage;
-        const pageLabel = d.isLateAddition ? `${d.latePrefix}1` : `${startPage}`;
-        allEntries.push({ title: d.name, date: d.date, pageLabel, isSection: false });
+      // Draw dynamic layout items
+      layout.items.forEach(item => {
+        indexPage.drawText(item.text, { x: item.x, y: item.y, size: 10, font });
       });
-    });
-
-    for (let j = startIndex; j < Math.min(startIndex + itemsPerPage, allEntries.length); j++) {
-      const entry = allEntries[j];
-      if (entry.isSection) {
-        indexPage.drawText(entry.title, { x: 50, y: yOffset, size: 11, font: boldFont });
-      } else {
-        indexPage.drawText(entry.title, { x: 60, y: yOffset, size: 10, font });
-        indexPage.drawText(entry.date || '-', { x: 400, y: yOffset, size: 10, font });
-        indexPage.drawText(entry.pageLabel, { x: 500, y: yOffset, size: 10, font });
-      }
-      yOffset -= 18;
+      
+      // Draw Header for table
+      indexPage.drawText('Document Name', { x: 50, y: listStartY, size: 10, font: boldFont });
+      indexPage.drawText('Date', { x: 400, y: listStartY, size: 10, font: boldFont });
+      indexPage.drawText('Page', { x: 500, y: listStartY, size: 10, font: boldFont });
     }
   }
 
-  // 3. Merge Documents and Add Separators
+  // 3. Populate Index and Store Links
+  const allEntries: any[] = [];
+  config.sections.forEach((s) => {
+    allEntries.push({ title: s.title.toUpperCase(), isSection: true });
+    s.documents.forEach((d) => {
+      const startPage = docTargetPages.get(d.id);
+      const pageLabel = d.isLateAddition ? `${d.latePrefix}1` : `${startPage}`;
+      allEntries.push({ 
+        title: d.name, 
+        date: formatDate(d.date, config.dateFormat), 
+        pageLabel, 
+        isSection: false, 
+        id: d.id 
+      });
+    });
+  });
+
+  let currentEntryIdx = 0;
+  for (let p = 0; p < indexPages.length; p++) {
+    const page = indexPages[p];
+    const { height } = page.getSize();
+    let yPos = (p === 0) ? listStartY - 25 : height - 50;
+    const capacity = (p === 0) ? firstPageCapacity : otherPageCapacity;
+    
+    for (let i = 0; i < capacity && currentEntryIdx < allEntries.length; i++) {
+      const entry = allEntries[currentEntryIdx];
+      if (entry.isSection) {
+        page.drawText(entry.title, { x: 50, y: yPos, size: 11, font: boldFont });
+      } else {
+        page.drawText(entry.title, { x: 60, y: yPos, size: 10, font });
+        page.drawText(entry.date || '-', { x: 400, y: yPos, size: 10, font });
+        page.drawText(entry.pageLabel, { x: 500, y: yPos, size: 10, font });
+      }
+      yPos -= 18;
+      currentEntryIdx++;
+    }
+  }
+
+  // 4. Merge Documents and Add Separators
   let globalPageCounter = estimatedIndexPages + 1;
+  const docRefMap: Map<string, any> = new Map();
 
   for (const { section, docsWithPages } of processedSections) {
     const sepPage = mergedPdf.addPage([595.28, 841.89]);
@@ -114,9 +165,31 @@ export async function generateBundle(config: BundleConfig): Promise<Uint8Array> 
         const { width, height } = page.getSize();
         const pageLabel = doc.isLateAddition ? `Page ${doc.latePrefix}${idx + 1}` : `Page ${globalPageCounter}`;
         page.drawText(pageLabel, { x: width - 80, y: 30, size: 10, font, color: rgb(0, 0, 0) });
-        mergedPdf.addPage(page);
+        const newPage = mergedPdf.addPage(page);
+        if (idx === 0) docRefMap.set(doc.id, newPage.ref);
         globalPageCounter++;
       });
+    }
+  }
+
+  // 5. Finalize Links
+  let linkEntryIdx = 0;
+  for (let p = 0; p < indexPages.length; p++) {
+    const page = indexPages[p];
+    const { height } = page.getSize();
+    let yPos = (p === 0) ? listStartY - 25 : height - 50;
+    const capacity = (p === 0) ? firstPageCapacity : otherPageCapacity;
+
+    for (let i = 0; i < capacity && linkEntryIdx < allEntries.length; i++) {
+      const entry = allEntries[linkEntryIdx];
+      if (!entry.isSection) {
+        const targetRef = docRefMap.get(entry.id);
+        if (targetRef) {
+          addLinkToPage(page, 50, yPos - 2, 500, 14, targetRef);
+        }
+      }
+      yPos -= 18;
+      linkEntryIdx++;
     }
   }
 

@@ -1,4 +1,3 @@
-
 {
   "name": "eBundle: Court Bundle Generator",
   "description": "A local-first legal document bundling tool for merging PDFs, generating automated indices with sections, pagination, and support for late additions.",

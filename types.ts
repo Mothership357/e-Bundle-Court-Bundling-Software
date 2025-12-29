@@ -1,4 +1,6 @@
 
+export type DateFormat = 'DD-MM-YYYY' | 'MM-DD-YYYY' | 'YYYY-MM-DD';
+
 export interface BundleDocument {
   id: string;
   name: string;
@@ -8,7 +10,8 @@ export interface BundleDocument {
   pageCount: number;
   isLateAddition: boolean;
   latePrefix: string;
-  base64Data?: string; // Used for loading/saving config
+  shouldOcr: boolean;
+  base64Data?: string;
 }
 
 export interface BundleSection {
@@ -22,16 +25,21 @@ export interface LayoutPosition {
   y: number;
 }
 
+export interface LayoutItem extends LayoutPosition {
+  id: string;
+  text: string;
+}
+
 export interface IndexLayout {
-  caseName: LayoutPosition;
-  caseNumber: LayoutPosition;
-  courtName: LayoutPosition;
+  items: LayoutItem[];
+  listStartY: number;
 }
 
 export interface BundleConfig {
   caseNumber: string;
   caseName: string;
   courtName: string;
+  dateFormat: DateFormat;
   sections: BundleSection[];
-  indexLayout?: IndexLayout;
+  indexLayout: IndexLayout;
 }
