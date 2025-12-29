@@ -7,9 +7,12 @@ Intended for the UK Court system, but applicable to other Jurisdictions.
 Initial code created with Google AI studio.
 
 ## Features:
+
  Only runs locally on machine, within your browser.
  
- Paginates and provides index in seconds, saving time. The index Hyperlinks to documents within the Bundle. Late Additions can be made with customisable pagination.
+ Paginates and provides index in seconds, saving time. The index hyperlinks to documents within the Bundle. 
+ 
+ Late Additions can be made with customisable pagination.
 
  Index page Configurability, to create different bundle index layouts.
 
