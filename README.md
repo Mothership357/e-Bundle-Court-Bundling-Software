@@ -21,7 +21,7 @@ Initial code created with Google AI studio.
 
 INSTALLATION
 
-1)Download files and extract node_modules to the same directory folder.
+1)Download files and extract node_modules (parts 1, 2 and 3) all to the same directory folder.
 
 2)run eBundle.bat.
 
