@@ -34,4 +34,8 @@ INSTALLATION
 
 3) Create Bundles ! 
 
+DEVELOPMENT
+
+Download files to directory - within commandline in this directory, run 'npm install' to build dependencies and 'npm run dev' to launch.
+
 Feedback most welcome. Code provided 'as is' with no warranty. 
